@@ -55,14 +55,6 @@ def pw64_dump_filesys(fname, startOffset, hexSize):
                         info = fin.read(length)
                         infoStr = info.decode('utf-8').rstrip('\0')
                         print('  %s: 0x%06X: %s' % (magicStr, length, infoStr))
-                    elif magicStr in ['LEVL', 'RNGS', 'BNUS', 'WOBJ', 'LPAD', 'TOYS', 'TPTS', 'APTS', 'COMM']:
-                        length = int.from_bytes(fin.read(4), byteorder='big')
-                        section_data = fin.read(length)
-                        print('  %s: 0x%06X:' % (magicStr, length))
-                        if hexSize > 0:
-                            if length > hexSize:
-                                section_data = section_data[:hexSize]
-                            print_hex_dump(section_data)
                     elif magicStr == 'GZIP': # not really gzip, but MIO0 container
                         gzipLength = int.from_bytes(fin.read(4), byteorder='big')
                         absOffset = fin.tell() + gzipLength
@@ -74,13 +66,23 @@ def pw64_dump_filesys(fname, startOffset, hexSize):
                         print('  %s: 0x%06X: %s/%s' % (magicStr, gzipLength, decompTypeStr, compTypeStr))
                         fin.seek(absOffset)
                     # generic handler for lengths that are not yet parsed
-                    elif magicStr in ['PAD ', 'COMM', 'PART', 'STRG', 'FRMT', 'ESND',
+                    elif magicStr in ['COMM', 'PART', 'STRG', 'FRMT', 'ESND',
                                       'JPTX', 'TPAD', 'CNTG', 'HOPD', 'LWIN', 'LSTP',
                                       'TARG', 'FALC', 'BALS', 'HPAD', 'BTGT', 'THER', 'PHTS', 'SIZE', 'DATA', 'QUAT',
                                       'XLAT', 'PHDR', 'RHDR', 'PPOS', 'RPKT', '.CTL', '.TBL',
-                                      'SCPP', 'SCPH', 'SCPX', 'SCPY', 'SCPR', 'SCPZ', 'SCP#']:
+                                      'SCPP', 'SCPH', 'SCPX', 'SCPY', 'SCPR', 'SCPZ', 'SCP#',
+                                      'LEVL', 'RNGS', 'BNUS', 'WOBJ', 'LPAD', 'TOYS', 'TPTS', 'APTS', 'COMM']:
                         length = int.from_bytes(fin.read(4), byteorder='big')
-                        print('  %s: 0x%06X' % (magicStr, length))
+                        section_data = fin.read(length)
+                        print('  %s: 0x%06X:' % (magicStr, length))
+                        if hexSize > 0:
+                            if length > hexSize:
+                                section_data = section_data[:hexSize]
+                            print_hex_dump(section_data)
+                    # PAD always seems to be 4 bytes of 0 - ignore it
+                    elif magicStr in ['PAD ']:
+                        length = int.from_bytes(fin.read(4), byteorder='big')
+                        print('  %s: 0x%06X:' % (magicStr, length))
                         fin.seek(length, 1)
                     else:
                         nextInt = int.from_bytes(fin.read(4), byteorder='big')
