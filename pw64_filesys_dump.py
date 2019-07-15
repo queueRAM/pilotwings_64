@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import struct
 import sys
 
 def auto_int(x):
@@ -23,7 +24,8 @@ def pw64_dump_filesys(fname, startOffset, hexSize):
         fin.seek(startOffset)
         dumping = True
         while (dumping):
-            sys.stdout.write('0x%06X: ' % fin.tell())
+            fileOffset = fin.tell()
+            sys.stdout.write('0x%06X|%06X: ' % (fileOffset, fileOffset - startOffset))
             magic = fin.read(4)
             magicInt = int.from_bytes(magic, byteorder='big')
             if magicInt == 0:
@@ -35,7 +37,8 @@ def pw64_dump_filesys(fname, startOffset, hexSize):
                 formEnd = fin.tell() + formLength
                 print('%s: 0x%06X (end: 0x%06X)' % (magicStr, formLength, formEnd))
                 while (fin.tell() < formEnd):
-                    sys.stdout.write('0x%06X: ' % fin.tell())
+                    fileOffset = fin.tell()
+                    sys.stdout.write('0x%06X|%06X: ' % (fileOffset, fileOffset - startOffset))
                     magic = fin.read(4)
                     magicStr = magic.decode('utf-8')
                     # no length on these
@@ -45,6 +48,7 @@ def pw64_dump_filesys(fname, startOffset, hexSize):
                                     'ADAT', '3VUE', 'PDAT', 'UVBT', 'UVSX',
                                     'UVRM']:
                         print('  %s' % magicStr)
+                        blockType = magicStr
                     elif magicStr == 'NAME': # ASCII name identifier
                         length = int.from_bytes(fin.read(4), byteorder='big')
                         name = fin.read(length)
@@ -55,7 +59,12 @@ def pw64_dump_filesys(fname, startOffset, hexSize):
                         info = fin.read(length)
                         infoStr = info.decode('utf-8').rstrip('\0')
                         print('  %s: 0x%06X: %s' % (magicStr, length, infoStr))
-                    elif magicStr == 'GZIP': # not really gzip, but MIO0 container
+                    elif magicStr == 'JPTX': # some ASCII identifier
+                        length = int.from_bytes(fin.read(4), byteorder='big')
+                        info = fin.read(length)
+                        infoStr = info.decode('utf-8').rstrip('\0')
+                        print('  %s: 0x%06X: %s' % (magicStr, length, infoStr))
+                    elif magicStr == 'GZIP': # not actually gzip, but MIO0 container
                         gzipLength = int.from_bytes(fin.read(4), byteorder='big')
                         absOffset = fin.tell() + gzipLength
                         decompType = fin.read(4)
@@ -66,19 +75,38 @@ def pw64_dump_filesys(fname, startOffset, hexSize):
                         print('  %s: 0x%06X: %s/%s' % (magicStr, gzipLength, decompTypeStr, compTypeStr))
                         fin.seek(absOffset)
                     # generic handler for lengths that are not yet parsed
-                    elif magicStr in ['COMM', 'PART', 'STRG', 'FRMT', 'ESND',
-                                      'JPTX', 'TPAD', 'CNTG', 'HOPD', 'LWIN', 'LSTP',
-                                      'TARG', 'FALC', 'BALS', 'HPAD', 'BTGT', 'THER', 'PHTS', 'SIZE', 'DATA', 'QUAT',
-                                      'XLAT', 'PHDR', 'RHDR', 'PPOS', 'RPKT', '.CTL', '.TBL',
-                                      'SCPP', 'SCPH', 'SCPX', 'SCPY', 'SCPR', 'SCPZ', 'SCP#',
-                                      'LEVL', 'RNGS', 'BNUS', 'WOBJ', 'LPAD', 'TOYS', 'TPTS', 'APTS', 'COMM']:
+                    elif magicStr == 'COMM':
                         length = int.from_bytes(fin.read(4), byteorder='big')
-                        section_data = fin.read(length)
+                        sectionData = fin.read(length)
+                        print('  %s: 0x%06X:' % (magicStr, length))
+                        if blockType == 'UVSQ':
+                            count = int(sectionData[0])
+                            uvsq = '>Hf'
+                            # +1 becuase last u16/float might be special
+                            for i in range(count + 1):
+                                (idx, val) = struct.unpack(uvsq, sectionData[1+6*i:7+6*i])
+                                print('    0x%04X: %f' % (idx, val))
+                        else:
+                            if hexSize > 0:
+                                if length > hexSize:
+                                    sectionData = sectionData[:hexSize]
+                                print_hex_dump(sectionData)
+                    # generic handler for lengths that are not yet parsed
+                    elif magicStr in ['PART', 'STRG', 'FRMT', 'ESND',
+                                      'TPAD', 'CNTG', 'HOPD', 'LWIN', 'LSTP',
+                                      'TARG', 'FALC', 'BALS', 'HPAD', 'BTGT',
+                                      'THER', 'PHTS', 'SIZE', 'DATA', 'QUAT',
+                                      'XLAT', 'PHDR', 'RHDR', 'PPOS', 'RPKT',
+                                      '.CTL', '.TBL',
+                                      'SCPP', 'SCPH', 'SCPX', 'SCPY', 'SCPR', 'SCPZ', 'SCP#',
+                                      'LEVL', 'RNGS', 'BNUS', 'WOBJ', 'LPAD', 'TOYS', 'TPTS', 'APTS']:
+                        length = int.from_bytes(fin.read(4), byteorder='big')
+                        sectionData = fin.read(length)
                         print('  %s: 0x%06X:' % (magicStr, length))
                         if hexSize > 0:
                             if length > hexSize:
-                                section_data = section_data[:hexSize]
-                            print_hex_dump(section_data)
+                                sectionData = sectionData[:hexSize]
+                            print_hex_dump(sectionData)
                     # PAD always seems to be 4 bytes of 0 - ignore it
                     elif magicStr in ['PAD ']:
                         length = int.from_bytes(fin.read(4), byteorder='big')
