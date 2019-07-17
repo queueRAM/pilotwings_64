@@ -110,7 +110,6 @@ def pw64_dump_filesys(fname, startOffset, hexSize):
                         decompLength = int.from_bytes(fin.read(4), byteorder='big')
 
                         compBytes = fin.read(gzipLength - 8)
-                        open('tmp.bin', 'wb').write(compBytes)
                         decompBytes = decompress_mio0(compBytes)
 
                         print('  %s: 0x%06X: %s' % (magicStr, gzipLength, decompTypeStr))
