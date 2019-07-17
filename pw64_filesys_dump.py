@@ -7,6 +7,38 @@ import sys
 def auto_int(x):
     return int(x, 0)
 
+def decompress_mio0(raw_bytes):
+    magic = raw_bytes[:4]
+    assert magic == b'MIO0'
+
+    uncompressed_size, lengths_offs, data_offs = struct.unpack('>LLL', raw_bytes[4:16])
+    flags_offs = 0x10
+
+    output = b""
+    while True:
+        command_byte = raw_bytes[flags_offs]
+        flags_offs += 1
+
+        for i in reversed(range(8)):
+            if command_byte & (1 << i):
+                # Literal
+                uncompressed_size -= 1
+                output += bytes([raw_bytes[data_offs]])
+                data_offs += 1
+            else:
+                # LZSS
+                tmp, = struct.unpack('>H', raw_bytes[lengths_offs:lengths_offs+2])
+                lengths_offs += 2
+
+                window_offset = (tmp & 0x0FFF) + 1
+                window_length = (tmp >> 12) + 3
+                uncompressed_size -= window_length
+                for j in range(window_length):
+                    output += bytes([output[-window_offset]])
+
+            if uncompressed_size <= 0:
+                return output
+
 def print_hex_dump(raw_bytes):
     count = 0
     for b in raw_bytes:
@@ -20,6 +52,12 @@ def print_hex_dump(raw_bytes):
         sys.stdout.write('\n')
 
 def pw64_dump_filesys(fname, startOffset, hexSize):
+    def hexdump(raw_bytes):
+        if hexSize > 0:
+            if len(raw_bytes) > hexSize:
+                raw_bytes = raw_bytes[:hexSize]
+            print_hex_dump(raw_bytes)
+
     with open(fname, 'rb') as fin:
         fin.seek(startOffset)
         dumping = True
@@ -70,10 +108,12 @@ def pw64_dump_filesys(fname, startOffset, hexSize):
                         decompType = fin.read(4)
                         decompTypeStr = decompType.decode('utf-8')
                         decompLength = int.from_bytes(fin.read(4), byteorder='big')
-                        compType = fin.read(4)
-                        compTypeStr = compType.decode('utf-8')
-                        print('  %s: 0x%06X: %s/%s' % (magicStr, gzipLength, decompTypeStr, compTypeStr))
-                        fin.seek(absOffset)
+
+                        compBytes = fin.read(gzipLength - 8)
+                        decompBytes = decompress_mio0(compBytes)
+
+                        print('  %s: 0x%06X: %s' % (magicStr, gzipLength, decompTypeStr))
+                        hexdump(decompBytes)
                     # generic handler for lengths that are not yet parsed
                     elif magicStr == 'COMM':
                         length = int.from_bytes(fin.read(4), byteorder='big')
@@ -87,10 +127,7 @@ def pw64_dump_filesys(fname, startOffset, hexSize):
                                 (idx, val) = struct.unpack(uvsq, sectionData[1+6*i:7+6*i])
                                 print('    0x%04X: %f' % (idx, val))
                         else:
-                            if hexSize > 0:
-                                if length > hexSize:
-                                    sectionData = sectionData[:hexSize]
-                                print_hex_dump(sectionData)
+                            hexdump(sectionData)
                     # generic handler for lengths that are not yet parsed
                     elif magicStr in ['PART', 'STRG', 'FRMT', 'ESND',
                                       'TPAD', 'CNTG', 'HOPD', 'LWIN', 'LSTP',
@@ -103,10 +140,7 @@ def pw64_dump_filesys(fname, startOffset, hexSize):
                         length = int.from_bytes(fin.read(4), byteorder='big')
                         sectionData = fin.read(length)
                         print('  %s: 0x%06X:' % (magicStr, length))
-                        if hexSize > 0:
-                            if length > hexSize:
-                                sectionData = sectionData[:hexSize]
-                            print_hex_dump(sectionData)
+                        hexdump(sectionData)
                     # PAD always seems to be 4 bytes of 0 - ignore it
                     elif magicStr in ['PAD ']:
                         length = int.from_bytes(fin.read(4), byteorder='big')
