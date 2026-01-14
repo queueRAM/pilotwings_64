@@ -1,5 +1,5 @@
 #pragma author queueRAM
-#pragma description Pilot Wings 64 ImHex Pattern N64 ROM header and filesystem
+#pragma description Pilotwings 64 ImHex Pattern N64 ROM header and filesystem
 
 #pragma endian big
 
@@ -122,7 +122,7 @@ struct Entry {
          ".TBL" | "SCPP" | "SCPH" | "SCPX" | "SCPY" | "SCPR" | "SCPZ" | "SCP#" |
          "LEVL" | "RNGS" | "BNUS" | "WOBJ" | "LPAD" | "TOYS" | "TPTS" | "APTS"): TBD entry;
     }
-} [[name(std::format("Entry({})", tag))]];
+} [[name(std::format("{}", tag))]];
 
 struct PW64_FORM {
     u64 defStart = $;
@@ -133,5 +133,5 @@ struct PW64_FORM {
 
 
 N64Header N64Header @ 0x00;
-
-PW64_FORM forms[while(std::mem::read_unsigned($, 4, std::mem::Endian::Big) != 0)] @ 0xDF5B0;
+PW64_FORM form1[while(std::mem::read_unsigned($, 4, std::mem::Endian::Big) != 0)] @ 0xDE720;
+PW64_FORM form2[while(std::mem::read_unsigned($, 4, std::mem::Endian::Big) != 0)] @ 0xDF5B0;
