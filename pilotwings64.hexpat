@@ -1,5 +1,5 @@
 #pragma author queueRAM
-#pragma description Pilotwings 64 ImHex Pattern N64 ROM header and filesystem
+#pragma description Pilotwings64 ImHex Pattern N64 ROM header and filesystem
 
 #pragma endian big
 
@@ -71,7 +71,118 @@ struct N64Header {
 };
 
 
-// --------- Pilot Wings 64 file system ------------
+// --------- Pilotwings 64 file system ------------
+struct Vec3f {
+    float x, y, z;
+};
+
+enum WOBJType : u8 {
+    Windsock = 0x00,
+    WindTurbine = 0x01,
+};
+
+struct WOBJ {
+    Vec3f position;
+    WOBJType wobjType;
+    padding[3];
+};
+
+struct LPAD {
+    Vec3f position;
+    float heading;
+    padding[8];
+};
+
+struct BNUS {
+    Vec3f position;
+    u32 unkC;
+    u32 unk10;
+    u32 unk14;
+    u32 unk18;
+    u32 unk1C; // TODO is this length 0x1C or 0x20?
+};
+
+struct THER {
+    Vec3f position;
+    float scale;
+    float height;
+    u32 unk14;
+    float unk18;
+};
+
+struct RNGS {
+    Vec3f position;
+    Vec3f angle;
+    padding[5];
+    u8 other;
+    padding[0x36];
+    u8 size;
+    padding[0x1B];
+    u8 axis;
+    padding[1];
+    u8 special;
+    padding[0x11];
+};
+
+struct BALS {
+    Vec3f position;
+    padding[20];
+    u8 type;
+    padding[15];
+    float scale;
+    padding[0x34];
+};
+
+struct TARG {
+    Vec3f position;
+    Vec3f angle;
+    u8 type;
+    u8 unk19;
+    padding[6];
+};
+
+struct HPAD {
+    Vec3f position;
+    Vec3f angle;
+    padding[8];
+    float unk20;
+    padding[0x40-0x24];
+};
+
+struct LSTP {
+    Vec3f upperLeft;
+    Vec3f lowerRight;
+    padding[4];
+    u8 unk1C;
+    padding[3];
+    float unk20;
+    padding[4];
+};
+
+struct TPAD {
+    Vec3f position;
+    Vec3f angle;
+    padding[0x10];
+    u8 onGround;
+    padding[3];
+    float unk2C;
+};
+
+struct BTGT {
+    Vec3f position;
+    Vec3f angle;
+    u8 unk18;
+    padding[7];
+};
+
+struct HOPD {
+    Vec3f position;
+    padding[7];
+    u8 unk13;
+    float scale;
+    float height;
+    padding[4];
+};
 
 // PAD always seems to be 4 bytes of 0
 struct PAD {
@@ -115,12 +226,25 @@ struct Entry {
         ("PAD "): PAD entry;
         ("COMM"): COMM entry;
         ("GZIP"): GZIP entry;
-        ("NAME" | "INFO" | "JPTX"): PW64_String entry;
-        ("PART" | "STRG" | "FRMT" | "ESND" | "TPAD" | "CNTG" | "HOPD" | "LWIN" | 
-         "LSTP" | "TARG" | "FALC" | "BALS" | "HPAD" | "BTGT" | "THER" | "PHTS" |
-         "SIZE" | "QUAT" | "XLAT" | "PHDR" | "RHDR" | "PPOS" | "RPKT" | ".CTL" | 
-         ".TBL" | "SCPP" | "SCPH" | "SCPX" | "SCPY" | "SCPR" | "SCPZ" | "SCP#" |
-         "LEVL" | "RNGS" | "BNUS" | "WOBJ" | "LPAD" | "TOYS" | "TPTS" | "APTS"): TBD entry;
+        ("NAME" | "INFO" | "JPTX" | "STRG"): PW64_String entry;
+        ("WOBJ"): {u32 length; WOBJ wobj[length / sizeof(WOBJ)];}
+        ("LPAD"): {u32 length; LPAD lpad[length / sizeof(LPAD)];}
+        ("BNUS"): {u32 length; BNUS bnus[length / sizeof(BNUS)];}
+        ("THER"): {u32 length; THER ther[length / sizeof(THER)];}
+        //("RNGS"): {u32 length; RNGS rngs[length / sizeof(RNGS)]; u32 unk;}
+        ("RNGS"): TBD entry; // some RNGS have 4 bytes at end. need to improve struct
+        ("BALS"): {u32 length; BALS bals[length / sizeof(BALS)];}
+        ("TARG"): {u32 length; TARG targ[length / sizeof(TARG)];}
+        ("CNTG"): {u32 length; TARG cntg[length / sizeof(TARG)];}
+        ("HPAD"): {u32 length; HPAD hpad[length / sizeof(HPAD)];}
+        ("LSTP"): {u32 length; LSTP lstp[length / sizeof(LSTP)];}
+        ("TPAD"): {u32 length; TPAD tpad[length / sizeof(TPAD)];}
+        ("BTGT"): {u32 length; BTGT btgt[length / sizeof(BTGT)];}
+        ("HOPD"): {u32 length; HOPD hopd[length / sizeof(HOPD)];}
+        ("PART" | "FRMT" | "ESND" | "LWIN" | "FALC" | "PHTS" | "SIZE" | "QUAT" |
+         "XLAT" | "PHDR" | "RHDR" | "PPOS" | "RPKT" | ".CTL" | ".TBL" | "LEVL" |
+         "SCPP" | "SCPH" | "SCPX" | "SCPY" | "SCPR" | "SCPZ" | "SCP#" | "TOYS" |
+         "TPTS" | "APTS"): TBD entry;
     }
 } [[name(std::format("{}", tag))]];
 
@@ -131,7 +255,9 @@ struct PW64_FORM {
     Entry entries[while(($ - defStart) < length)];
 };
 
+// --------- Declarations
 
 N64Header N64Header @ 0x00;
+
 PW64_FORM form1[while(std::mem::read_unsigned($, 4, std::mem::Endian::Big) != 0)] @ 0xDE720;
 PW64_FORM form2[while(std::mem::read_unsigned($, 4, std::mem::Endian::Big) != 0)] @ 0xDF5B0;
