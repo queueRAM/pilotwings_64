@@ -99,7 +99,7 @@ struct BNUS {
     u32 unk10;
     u32 unk14;
     u32 unk18;
-    u32 unk1C; // TODO is this length 0x1C or 0x20?
+    u32 unk1C;
 };
 
 struct THER {
@@ -184,6 +184,19 @@ struct HOPD {
     padding[4];
 };
 
+struct TPTS {
+    u8 unk0;
+    padding[3];
+    Vec3f position;
+    float unk10;
+    float unk14;
+    s32 unk18;
+    float unk1C;
+    s32 unk20;
+    float unk24;
+    Vec3f unk28;
+};
+
 // PAD always seems to be 4 bytes of 0
 struct PAD {
     u32 length;
@@ -241,10 +254,11 @@ struct Entry {
         ("TPAD"): {u32 length; TPAD tpad[length / sizeof(TPAD)];}
         ("BTGT"): {u32 length; BTGT btgt[length / sizeof(BTGT)];}
         ("HOPD"): {u32 length; HOPD hopd[length / sizeof(HOPD)];}
+        ("TPTS"): {u32 length; TPTS tpts[length / sizeof(TPTS)];}
         ("PART" | "FRMT" | "ESND" | "LWIN" | "FALC" | "PHTS" | "SIZE" | "QUAT" |
          "XLAT" | "PHDR" | "RHDR" | "PPOS" | "RPKT" | ".CTL" | ".TBL" | "LEVL" |
          "SCPP" | "SCPH" | "SCPX" | "SCPY" | "SCPR" | "SCPZ" | "SCP#" | "TOYS" |
-         "TPTS" | "APTS"): TBD entry;
+         "APTS"): TBD entry;
     }
 } [[name(std::format("{}", tag))]];
 
