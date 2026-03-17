@@ -77,13 +77,17 @@ struct N64Header {
 // --- common types
 using f32 = be float;
 
-struct Vec3f {
+struct Vec3F {
     f32 x, y, z;
-};
+} [[static]]; // size = 0xC
+
+struct Vec4F {
+    f32 x, y, z, w;
+} [[static]]; // size = 0x10
 
 struct Mtx4F {
     f32 m[16];
-};
+} [[static]]; // size = 0x40
 
 // --- UV kernel types
 struct UVSY {
@@ -227,18 +231,19 @@ struct TBD_ {
 
 // PW64 Level types
 enum WOBJType : u8 {
-    Windsock = 0x00,
-    WindTurbine = 0x01,
+    WindsockJointed = 0x00,
+    WindTurbine     = 0x01,
+    WindsockSimple  = 0x02,
 };
 
 struct WOBJ {
-    Vec3f position;
+    Vec3F position;
     WOBJType wobjType;
     padding[3];
 };
 
 struct BALS {
-    Vec3f position;
+    Vec3F position;
     padding[20];
     u8 type;
     padding[15];
@@ -247,7 +252,7 @@ struct BALS {
 };
 
 struct BNUS {
-    Vec3f position;
+    Vec3F position;
     u32 unkC;
     u32 unk10;
     u32 unk14;
@@ -256,28 +261,23 @@ struct BNUS {
 };
 
 struct BTGT {
-    Vec3f position;
-    Vec3f angle;
+    Vec3F position;
+    Vec3F angle;
     u8 unk18;
     padding[7];
 };
 
 struct HPAD {
-    Vec3f position;
-    Vec3f angle;
+    Vec3F position;
+    Vec3F angle;
     padding[8];
     float unk20;
     padding[0x40-0x24];
 };
 
-struct LPAD {
-    Vec3f position;
-    Vec3f angle;
-};
-
 struct LSTP {
-    Vec3f upperLeft;
-    Vec3f lowerRight;
+    Vec3F upperLeft;
+    Vec3F lowerRight;
     padding[4];
     u8 unk1C;
     padding[3];
@@ -286,16 +286,16 @@ struct LSTP {
 };
 
 struct TARG {
-    Vec3f position;
-    Vec3f angle;
+    Vec3F position;
+    Vec3F angle;
     u8 type;
     u8 unk19;
     padding[6];
 };
 
 struct TPAD {
-    Vec3f position;
-    Vec3f angle;
+    Vec3F position;
+    Vec3F angle;
     padding[0x10];
     u8 onGround;
     padding[3];
@@ -303,7 +303,7 @@ struct TPAD {
 };
 
 struct HOPD {
-    Vec3f position;
+    Vec3F position;
     padding[7];
     u8 unk13;
     float scale;
@@ -312,8 +312,8 @@ struct HOPD {
 };
 
 struct RNGS {
-    Vec3f position;
-    Vec3f angle;
+    Vec3F position;
+    Vec3F angle;
     padding[5];
     u8 other;
     padding[0x36];
@@ -338,23 +338,50 @@ struct THER {
     float unk24;
 };
 
-struct TPTS {
-    u8 unk0;
-    padding[3];
-    Vec3f position;
-    float unk10;
-    float unk14;
-    s32 unk18;
-    float unk1C;
-    s32 unk20;
-    float unk24;
-    Vec3f unk28;
+
+struct VUE3_COMM {
+    s32 unk0;
+    s32 unk4;
+    s32 unk8;
+    s32 unkC;
+    s32 modelId;
+    s16 unk14;
+    padding[parent.length - 0x16];
+}; // size = 0x16 (should be 0x20?)
+
+struct VUE3_QUAT_Unk8 {
+    Vec4F unk0;
+    s32 unk10;
+    u8 pad14[0x4];
+} [[static]]; // size = 0x18
+
+struct VUE3_QUAT {
+    s32 count;
+    s32 unk4;
+    VUE3_QUAT_Unk8 data[count];
 };
 
-// strings found in NAME, INFO, JPTX
-struct PW64_String {
+struct VUE3_XLAT_Unk8 {
+    Vec3F unk0;
+    s32 unkC;
+} [[static]]; // size = 0x10
+
+struct VUE3_XLAT {
+    s32 count;
+    s32 unk4;
+    VUE3_XLAT_Unk8 data[count];
+};
+
+// 3VUE
+struct VUE3 {
+    char tag[4];
     u32 length;
-    char info[length];
+    match (tag) {
+        ("PAD "): u8 pad[length] [[hidden]];
+        ("COMM"): VUE3_COMM comm;
+        ("QUAT"): VUE3_QUAT quat;
+        ("XLAT"): VUE3_XLAT xlat;
+    }
 };
 
 
@@ -390,7 +417,7 @@ fn pw64ToAscii(ref auto val) {
             (0x4F): result += ":";
             (0x50 ... 0x59): result += std::format("{}", v - 0x50);
             (0xD4): result += "%";
-            (0xFD): result += " "; // actually "\t"
+            (0xFD): result += " "; // actually "\t" but that renders oddly in ImHex
             (0xFE): result += "\n";
             (0xFF): result += "\0";
             (_): result += ".";
@@ -408,6 +435,126 @@ struct ADAT {
         ("NAME"): char name[length];
         ("DATA"): u16 data[length / 2] [[format("pw64ToAscii")]];
         (_): u8 data[length]; // catch all for things like "SIZE"
+    }
+};
+
+
+struct PDAT_PHDR {
+    s32 unk0;
+    s32 duration;
+} [[static]]; // size = 0x8
+
+struct PDAT_PPOS {
+    Vec3F pos;
+    Vec3F rot;
+} [[static]]; // size = 0x18
+
+struct PDAT {
+    char tag[4];
+    u32 length;
+    const u64 Start = $;
+    match (tag) {
+        ("PAD "): u8 pad[length] [[hidden]];
+        ("PHDR"): PDAT_PHDR phdr;
+        ("PPOS"): PDAT_PPOS pos[while($ - Start < length)];
+        (_): u8 data[length];
+    }
+};
+
+
+struct LevelLEVL {
+    u8 countESND;
+    u8 countWOBJ;
+    u8 countLPAD;
+    u8 countTOYS;
+    u8 countTPTS;
+    u8 countAPTS;
+    u8 countBNUS;
+    padding[1];
+};
+
+struct LevelAPTS {
+    Vec3F unk0;
+    f32 unkC;
+    f32 unk10;
+    f32 unk14;
+    f32 unk18;
+    f32 unk1C;
+} [[static]]; // size = 0x20
+
+struct LevelBNUS {
+    Vec3F pos;
+    f32 unkC;
+    f32 unk10;
+    f32 unk14;
+    s32 unk18;
+    padding[4];
+} [[static]]; // size = 0x1C (padded to 0x20)
+
+struct LevelESND {
+    Mtx4F unk0;
+    Vec3F unk40;
+    Vec3F unk4C;
+    s8 unk58;
+    u8 pad59[3];
+    f32 unk5C;
+    f32 unk60;
+    s32 unk64;
+    f32 unk68;
+    f32 unk6C;
+    s8 unk70;
+    u8 pad71[3];
+    s32 unk74;
+} [[static]]; // size = 0x78
+
+// potential landing pad defined for Map (Level)
+struct LevelLPAD {
+    Vec3F pos;
+    f32 unkC;
+    s32 unk10;
+    u8 unk14;
+    padding[3];
+} [[static]]; // size = 0x18
+
+struct LevelTOYS {
+    Vec3F pos;
+    u8 unkC[4];
+} [[static]]; // size = 0x10
+
+struct LevelTPTS {
+    u8 unk0;
+    u8 unk1[3];
+    Vec3F unk4;
+    f32 unk10;
+    f32 unk14;
+    s32 unk18;
+    f32 unk1C;
+    s32 unk20;
+    f32 unk24;
+    Vec3F unk28;
+    padding[4];
+} [[static]]; // size = 0x34 (padded to 0x38)
+
+struct LevelWOBJ {
+    Vec3F pos;
+    u8 unkC; // id or type? value between 0 and 2
+    padding[3];
+} [[static]]; // size = 0x10
+
+struct UPWL {
+    char tag[4];
+    u32 length;
+    const u64 Start = $;
+    match (tag) {
+        ("PAD "): u8 pad[length] [[hidden]];
+        ("LEVL"): LevelLEVL levl;
+        ("APTS"): LevelAPTS apts[while($ - Start < length)];
+        ("BNUS"): LevelBNUS bnus[while($ - Start < length)];
+        ("ESND"): LevelESND esnd[while($ - Start < length)];
+        ("LPAD"): LevelLPAD lpad[while($ - Start < length)];
+        ("TOYS"): LevelTOYS toys[while($ - Start < length)];
+        ("TPTS"): LevelTPTS tpts[while($ - Start < length)];
+        ("WOBJ"): LevelWOBJ wobj[while($ - Start < length)];
     }
 };
 
@@ -451,12 +598,12 @@ struct FORM {
         ("UVBT"): UV<TBD_, false> entries[while(($ - TagStart) < length)]; // pure GZIP
         ("UVAN"): UV<TBD_, false> entries[while(($ - TagStart) < length)];
         ("UVFT"): UV<u8, false> entries[while(($ - TagStart) < length)];
-        ("UPWL"): UV<u8, false> entries[while(($ - TagStart) < length)]; // TODO: types for LEVL/LPAD/etc.
+        ("UPWL"): UPWL entries[while(($ - TagStart) < length)];
         ("SPTH"): UV<u8, false> entries[while(($ - TagStart) < length)]; // TODO: types for SCPP/SCPH/etc.
         ("UPWT"): UV<TBD_, false> entries[while(($ - TagStart) < length)]; // TODO: types for JPTX/NAME/INFO
-        ("ADAT"): ADAT entries[while(($ - TagStart) < length)]; // TODO: types for SIZE/NAME/DATA
-        ("3VUE"): UV<TBD_, false> entries[while(($ - TagStart) < length)]; // TODO: types for QUAT/XLAT
-        ("PDAT"): UV<TBD_, false> entries[while(($ - TagStart) < length)]; // TODO: types for QUAT/XLAT
+        ("ADAT"): ADAT entries[while(($ - TagStart) < length)];
+        ("3VUE"): VUE3 entries[while(($ - TagStart) < length)];
+        ("PDAT"): PDAT entries[while(($ - TagStart) < length)];
         ("UVSX"): UV<TBD_, false> entries[while(($ - TagStart) < length)]; // TODO: types for .CTL/.TBL
     }
 } [[name(std::format("{}", tag))]];
