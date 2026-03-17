@@ -77,6 +77,11 @@ struct N64Header {
 // --- common types
 using f32 = be float;
 
+struct VecTimeVal {
+    f32 time;
+    f32 value;
+} [[static]]; // size = 0x8
+
 struct Vec3F {
     f32 x, y, z;
 } [[static]]; // size = 0xC
@@ -229,116 +234,6 @@ struct TBD_ {
 };
 
 
-// PW64 Level types
-enum WOBJType : u8 {
-    WindsockJointed = 0x00,
-    WindTurbine     = 0x01,
-    WindsockSimple  = 0x02,
-};
-
-struct WOBJ {
-    Vec3F position;
-    WOBJType wobjType;
-    padding[3];
-};
-
-struct BALS {
-    Vec3F position;
-    padding[20];
-    u8 type;
-    padding[15];
-    float scale;
-    padding[0x34];
-};
-
-struct BNUS {
-    Vec3F position;
-    u32 unkC;
-    u32 unk10;
-    u32 unk14;
-    u32 unk18;
-    u32 unk1C;
-};
-
-struct BTGT {
-    Vec3F position;
-    Vec3F angle;
-    u8 unk18;
-    padding[7];
-};
-
-struct HPAD {
-    Vec3F position;
-    Vec3F angle;
-    padding[8];
-    float unk20;
-    padding[0x40-0x24];
-};
-
-struct LSTP {
-    Vec3F upperLeft;
-    Vec3F lowerRight;
-    padding[4];
-    u8 unk1C;
-    padding[3];
-    float unk20;
-    padding[4];
-};
-
-struct TARG {
-    Vec3F position;
-    Vec3F angle;
-    u8 type;
-    u8 unk19;
-    padding[6];
-};
-
-struct TPAD {
-    Vec3F position;
-    Vec3F angle;
-    padding[0x10];
-    u8 onGround;
-    padding[3];
-    float unk2C;
-};
-
-struct HOPD {
-    Vec3F position;
-    padding[7];
-    u8 unk13;
-    float scale;
-    float height;
-    padding[4];
-};
-
-struct RNGS {
-    Vec3F position;
-    Vec3F angle;
-    padding[5];
-    u8 other;
-    padding[0x36];
-    u8 size;
-    padding[0x1B];
-    u8 axis;
-    padding[1];
-    u8 special;
-    padding[0x11];
-};
-
-struct THER {
-    float x;
-    float y;
-    float z;
-    float scale;
-    float height;
-    float unk14;
-    float unk18;
-    float unk1C;
-    float unk20;
-    float unk24;
-};
-
-
 struct VUE3_COMM {
     s32 unk0;
     s32 unk4;
@@ -462,6 +357,30 @@ struct PDAT {
 };
 
 
+struct SPTH_SCP {
+    s32 count;
+    VecTimeVal vals[count];
+}; // size = 0x4 + (0x8 * count)
+
+struct SPTH {
+    char tag[4];
+    u32 length;
+    const u64 Start = $;
+    match (tag) {
+        ("PAD "): u8 pad[length] [[hidden]];
+        ("SCPH"): SPTH_SCP scph;
+        ("SCPP"): SPTH_SCP scpp;
+        ("SCPR"): SPTH_SCP scpp;
+        ("SCPX"): SPTH_SCP scpx;
+        ("SCPY"): SPTH_SCP scpy;
+        ("SCPZ"): SPTH_SCP scpz;
+        ("SCP#"): SPTH_SCP scp_;
+        (_): u8 data[length];
+    }
+    padding[while (($ - Start) < length)]; // length is always to 8-bytes, not offsets
+};
+
+
 struct LevelLEVL {
     u8 countESND;
     u8 countWOBJ;
@@ -535,12 +454,19 @@ struct LevelTPTS {
     padding[4];
 } [[static]]; // size = 0x34 (padded to 0x38)
 
+enum WOBJType : u8 {
+    WindsockJointed = 0x00,
+    WindTurbine     = 0x01,
+    WindsockSimple  = 0x02,
+};
+
 struct LevelWOBJ {
     Vec3F pos;
-    u8 unkC; // id or type? value between 0 and 2
+    WOBJType type;
     padding[3];
 } [[static]]; // size = 0x10
 
+// PW64 Level (map) data
 struct UPWL {
     char tag[4];
     u32 length;
@@ -556,6 +482,343 @@ struct UPWL {
         ("TPTS"): LevelTPTS tpts[while($ - Start < length)];
         ("WOBJ"): LevelWOBJ wobj[while($ - Start < length)];
     }
+};
+
+// --- UV user types
+struct Unk803599D0 {
+    s32 unk0;
+    f32 unk4;
+    f32 unk8;
+    f32 unkC;
+    f32 unk10;
+    f32 unk14;
+    f32 unk18;
+    f32 unk1C;
+    f32 unk20;
+    f32 unk24;
+    f32 unk28;
+    f32 unk2C;
+    f32 unk30;
+    f32 unk34;
+    f32 unk38;
+    f32 unk3C;
+    f32 unk40;
+    s32 pad44;
+    s32 pad48;
+    s32 pad4C;
+    s32 pad50;
+} [[static]]; // size = 0x54
+
+struct Unk80345C80 {
+    Unk803599D0 unk0;
+    Unk803599D0 unk54;
+    Unk803599D0 unkA8;
+    Unk803599D0 unkFC;
+    Unk803599D0 unk150;
+    u8 pad1A4[0x3B4-0x1A4];
+    s32 unk3B4;
+    s32 unk3B8;
+    f32 unk3BC;
+    f32 unk3C0;
+    f32 unk3C4;
+    f32 unk3C8;
+} [[static]]; // size = 0x3CC
+
+struct UPWT_COMM {
+    u8 classNum;
+    u8 vehNum;
+    u8 testNum;
+    u8 unk3;
+    u8 unk4;
+    u8 unk5[0x3];
+    u8 unk8[4];
+    u8 unkC[4];
+    s32 unk10;
+    u8 unk14[0x18];
+    s32 unk2C;
+    u8 unk30[0x14];
+    f32 unk44;
+    Unk80345C80 unk48;
+    u8 unk414[8];
+    u8 countTHER;
+    u8 countLWIN;
+    u8 countTPAD;
+    u8 countLPAD;
+    u8 countLSTP;
+    u8 countRNGS;
+    u8 countBALS;
+    u8 countTARG;
+    u8 countHPAD;
+    u8 countBTGT;
+    u8 countPHTS;
+    u8 countFALC;
+    u8 countSDFM;
+    u8 countCNTG;
+    u8 countHOPD;
+    u8 countOBSV;
+} [[static]]; // size = 0x42C (padded to 0x430 in FS)
+
+struct TaskBALS {
+    Vec3F pos;
+    u8 padC[0x18 - 0xC];
+    s32 unk18;
+    f32 unk1C;
+    u8 type;
+    u8 unk21;
+    u8 pad22[2];
+    f32 unk24;
+    f32 unk28;
+    f32 unk2C;
+    f32 scale;
+    s32 unk34;
+    s32 unk38;
+    f32 unk3C;
+    f32 unk40;
+    u8 pad44[4];
+    f32 unk48;
+    f32 unk4C;
+    f32 unk50;
+    s32 unk54;
+    s32 unk58;
+    f32 unk5C;
+    f32 unk60;
+    f32 unk64;
+} [[static]]; // size = 0x68
+
+struct TaskBTGT {
+    Vec3F pos;
+    s32 unkC;
+    f32 unk10;
+    f32 unk14;
+    u8 unk18;
+    u8 unk19;
+    padding[2];
+} [[static]]; // size = 0x1C (padded to 0x20 in FS)
+
+struct TaskCNTG {
+    Vec3F pos;
+    f32 unkC;
+    f32 unk10;
+    f32 unk14;
+    u8 unk18;
+    padding[3];
+} [[static]]; // size = 0x1C (padded to 0x20 in FS)
+
+struct TaskFALC {
+    Vec3F unk0;
+    f32 unkC;
+    u8 unk10;
+    u8 unk11;
+    u8 unk12;
+    u8 unk13;
+    u8 pad14[4];
+    f32 unk18;
+    f32 unk1C;
+    f32 unk20;
+    f32 unk24;
+    f32 unk28;
+    f32 unk2C;
+    f32 unk30;
+    f32 unk34;
+    f32 unk38;
+    f32 unk3C;
+    f32 unk40;
+    f32 unk44;
+    f32 unk48;
+    f32 unk4C;
+    f32 unk50;
+    f32 unk54;
+    f32 unk58;
+    f32 unk5C;
+    f32 unk60;
+    f32 unk64;
+    f32 unk68;
+    f32 unk6C;
+    f32 unk70;
+    f32 unk74;
+    f32 unk78;
+    f32 unk7C;
+    f32 unk80;
+    f32 unk84;
+    f32 unk88;
+    f32 unk8C;
+    f32 unk90;
+    f32 unk94;
+    f32 unk98;
+    f32 unk9C;
+    f32 unkA0;
+    f32 unkA4;
+    f32 unkA8;
+} [[static]]; // size = 0xAC
+
+struct TaskHOPD {
+    u8 pad0[4];
+    Vec3F pos;
+    s32 unk10;
+    f32 scale;
+    f32 height;
+    u8 pad1C[4];
+} [[static]]; // size = 0x20
+
+struct TaskHPAD {
+    Vec3F unk0;
+    Vec3F unkC;
+    u8 pad18[4];
+    u8 unk1C;
+    u8 unk1D;
+    u8 pad1E[2];
+    f32 unk20;
+    u8 unk24;
+    u8 pad25[3];
+    s32 unk28[5]; // size unknown
+    u8 unk3C;
+    padding[3];
+} [[static]] ; // size = 0x40
+
+struct TaskLPAD {
+    Vec3F pos;
+    Vec3F angle;
+    u8 pad18[4];
+    Vec3F unk1C;
+    u8 unk28;
+    u8 pad29[3];
+    u8 unk2C;
+    padding[3];
+} [[static]]; // size = 0x30
+
+struct TaskLSTP {
+    Vec3F pos;
+    Vec3F unkC;
+    u8 pad10[0x4];
+    u8 unk1C;
+    padding[3];
+    f32 unk20;
+} [[static]]; // size = 0x24 (padded to 0x28 in FS)
+
+struct TaskLWIN {
+    Vec3F unk0;
+    Vec3F unkC;
+    Vec3F unk18;
+    Vec3F unk24;
+    Vec3F unk30;
+    s32 unk3C;
+    Vec3F unk40;
+    f32 unk4C;
+    u8 unk50;
+    u8 unk51;
+    padding[2];
+} [[static]]; // size = 0x54
+
+// OBSV is not actually present in FS, but is decoded in code
+struct TaskOBSV {
+    f32 x;
+    f32 y;
+    f32 z;
+    f32 unkC;
+} [[static]]; // size = 0x10
+
+struct TaskPHTS {
+    s32 unk0;
+    s32 unk4;
+    f32 unk8;
+    f32 unkC;
+    f32 unk10;
+} [[static]]; // size = 0x14
+
+struct TaskRNGS {
+    Vec3F pos;
+    Vec3F angle;
+    u8 pad18[5];
+    u8 unk1D;
+    u8 unk1E;
+    u8 pad1F[1];
+    s32 unk20[5]; // size unknown
+    u8 unk34;
+    u8 pad35[3];
+    s32 unk38[5]; // size unknown
+    u8 unk4C;
+    u8 unk4D;
+    u8 pad4E[2];
+    f32 unk50;
+    u8 size;
+    u8 unk55;
+    u8 pad56[2];
+    f32 unk58;
+    f32 unk5C;
+    u8 unk60;
+    u8 pad61[3];
+    f32 unk64;
+    f32 unk68;
+    f32 unk6C;
+    u8 axis;
+    u8 unk71;
+    u8 unk72;
+    u8 unk73;
+    char unk74[0x10]; // string name?
+} [[static]]; // size = 0x84
+
+// SDFM is not present in FS, but is copied in code so only size is known
+struct TaskSDFM {
+    u8 unk0[0x4C];
+} [[static]]; // size = 0x4C
+
+struct TaskTARG {
+    Vec3F pos;
+    Vec3F rot;
+    u8 targetType;
+    u8 unk19;
+    s32 pad1C;
+} [[static]]; // size = 0x20
+
+struct TaskTHER {
+    Vec3F pos;
+    f32 scale;
+    f32 height;
+    s32 unk14;
+    f32 unk18;
+    f32 unk1C;
+    f32 unk20;
+    f32 unk24;
+} [[static]]; // size = 0x28
+
+struct TaskTPAD {
+    Vec3F pos;
+    Vec3F angle;
+    u8 pad18[4];
+    Vec3F unk1C;
+    u8 unk28;
+    u8 pad29[3];
+    f32 unk2C;
+} [[static]]; // size = 0x30
+
+// PW64 Task objectives data
+struct UPWT {
+    char tag[4];
+    u32 length;
+    const u64 Start = $;
+    match (tag) {
+        ("PAD "): u8 pad[length] [[hidden]];
+        ("JPTX" | "NAME" | "INFO"): char data[length];
+        ("COMM"): UPWT_COMM comm;
+        ("BALS"): TaskBALS bals[length / sizeof(TaskBALS)];
+        ("BTGT"): TaskBTGT btgt[length / sizeof(TaskBTGT)];
+        ("CNTG"): TaskCNTG cntg[length / sizeof(TaskCNTG)];
+        ("FALC"): TaskFALC falc[length / sizeof(TaskFALC)];
+        ("HOPD"): TaskHOPD hopd[length / sizeof(TaskHOPD)];
+        ("HPAD"): TaskHPAD hpad[length / sizeof(TaskHPAD)];
+        ("LPAD"): TaskLPAD lpad[length / sizeof(TaskLPAD)];
+        ("LSTP"): TaskLSTP lstp[length / sizeof(TaskLSTP)];
+        ("LWIN"): TaskLWIN lwin[length / sizeof(TaskLWIN)];
+        ("OBSV"): TaskOBSV obsv[length / sizeof(TaskOBSV)];
+        ("PHTS"): TaskPHTS phts[length / sizeof(TaskPHTS)];
+        ("RNGS"): TaskRNGS rngs[length / sizeof(TaskRNGS)];
+        ("SDFM"): TaskSDFM sdfm[length / sizeof(TaskSDFM)];
+        ("TARG"): TaskTARG targ[length / sizeof(TaskTARG)];
+        ("THER"): TaskTHER ther[length / sizeof(TaskTHER)];
+        ("TPAD"): TaskTPAD tpad[length / sizeof(TaskTPAD)];
+        (_): u8 data[length];
+    }
+    padding[while (($ - Start) < length)]; // length is always to 8-bytes, not offsets
 };
 
 
@@ -599,8 +862,8 @@ struct FORM {
         ("UVAN"): UV<TBD_, false> entries[while(($ - TagStart) < length)];
         ("UVFT"): UV<u8, false> entries[while(($ - TagStart) < length)];
         ("UPWL"): UPWL entries[while(($ - TagStart) < length)];
-        ("SPTH"): UV<u8, false> entries[while(($ - TagStart) < length)]; // TODO: types for SCPP/SCPH/etc.
-        ("UPWT"): UV<TBD_, false> entries[while(($ - TagStart) < length)]; // TODO: types for JPTX/NAME/INFO
+        ("SPTH"): SPTH entries[while(($ - TagStart) < length)];
+        ("UPWT"): UPWT entries[while(($ - TagStart) < length)];
         ("ADAT"): ADAT entries[while(($ - TagStart) < length)];
         ("3VUE"): VUE3 entries[while(($ - TagStart) < length)];
         ("PDAT"): PDAT entries[while(($ - TagStart) < length)];
